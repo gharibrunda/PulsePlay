@@ -358,9 +358,7 @@ ORDER BY times_recommended DESC, s.title;
 
 
 -- 25. Find Users with Fast Songs in Their Playlists
--- This query finds users who own at least one playlist containing
--- a song with a tempo of 150 BPM or faster. EXISTS checks whether
--- at least one matching playlist and song are present.
+-- This query finds users who own at least one playlist containing a song with a tempo of 150 BPM or faster. EXISTS checks whether at least one matching playlist and song are present.
 
 SELECT u.user_id, u.username
 FROM Users AS u
@@ -375,9 +373,7 @@ ORDER BY u.username;
 
 
 -- 26. Find Songs That Were Never Recommended
--- This query finds songs in the catalog that do not appear
--- in the Recommendations table. NOT EXISTS checks for the absence
--- of a matching recommendation.
+-- This query finds songs in the catalog that do not appear in the Recommendations table. NOT EXISTS checks for the absence of a matching recommendation.
 
 SELECT s.song_id, s.title, s.artist
 FROM Songs AS s
@@ -438,9 +434,7 @@ ORDER BY s.song_id;
 
 
 -- 30. Find the Latest Heart-Rate Reading for Each Workout
--- This query uses a common table expression and ROW_NUMBER to identify
--- the latest heart-rate reading for each workout session. It compares
--- that reading with the workout's selected target heart-rate range.
+-- This query uses a common table expression and ROW_NUMBER to identify the latest heart-rate reading for each workout session. It compares that reading with the workout's selected target heart-rate range.
 
 WITH latest_readings AS (
     SELECT w.session_id, w.target_hr_min, w.target_hr_max,
@@ -465,9 +459,7 @@ ORDER BY session_id;
 
 
 -- 31. Compare Users' Average Workout Heart Rates
--- This query uses multiple common table expressions to calculate
--- the average heart rate for each workout and summarize the results
--- for each user, including the number of sessions with readings.
+-- This query uses multiple common table expressions to calculate the average heart rate for each workout and summarize the results for each user, including the number of sessions with readings.
 
 WITH session_averages AS (
     SELECT w.session_id, w.user_id,
@@ -491,8 +483,7 @@ ORDER BY us.mean_session_hr DESC;
 
 
 -- 32. Rank Songs by Tempo Within Each Genre
--- This query uses ROW_NUMBER to rank songs by tempo separately
--- within each genre. It displays the two fastest songs from each genre.
+-- This query uses ROW_NUMBER to rank songs by tempo separately within each genre. It displays the two fastest songs from each genre.
 
 WITH ranked_songs AS (
     SELECT song_id, genre, title, tempo_bpm,
@@ -527,9 +518,7 @@ ORDER BY activity_rank, username;
 
 
 -- 34. Classify Recommendation Outcomes
--- This query uses CASE to group recommendations into outcome categories
--- based on their status and user rating. It counts the recommendations
--- in each category.
+-- This query uses CASE to group recommendations into outcome categories based on their status and user rating. It counts the recommendations in each category.
 
 SELECT
     CASE
@@ -553,8 +542,7 @@ ORDER BY outcome_count DESC, outcome;
 
 
 -- 35. Create a Workout Summary View
--- This view summarizes workout sessions with their owners, target heart-rate
--- ranges, average heart rates, number of readings, and performance scores.
+-- This view summarizes workout sessions with their owners, target heart-rate ranges, average heart rates, number of readings, and performance scores.
 -- It can be queried later without repeating the full joins and aggregation.
 
 CREATE VIEW IF NOT EXISTS vw_WorkoutOverview AS
@@ -573,9 +561,7 @@ GROUP BY w.session_id, u.username, w.start_time,
 
 
 -- 36. Find the Latest Heart-Rate Reading Using a Correlated Subquery
--- This query finds the most recently recorded heart-rate value
--- for each workout session. The correlated subquery uses the current
--- workout session to retrieve its latest reading.
+-- This query finds the most recently recorded heart-rate value for each workout session. The correlated subquery uses the current workout session to retrieve its latest reading.
 
 SELECT w.session_id, u.username,
        (
@@ -595,8 +581,7 @@ ORDER BY w.session_id;
 -- EXTRA VERIFICATION
 -- ============================================================================
 -- This query displays the workout summary view created in Statement 35.
--- It is included for verification and is not counted as one of the 36
--- numbered SQL statements.
+-- It is included for verification and is not counted as one of the 36 numbered SQL statements.
 -- ============================================================================
 
 SELECT *
