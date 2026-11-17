@@ -16,9 +16,7 @@ PRAGMA foreign_keys = ON;
 .headers on
 .mode column
 
--- ============================================================
 -- SIMPLE STATEMENTS: 6-10
--- ============================================================
 
 -- 6. Insert a new workout playlist for an existing user.
 -- This gives us another playlist that can hold workout songs.
@@ -48,9 +46,8 @@ WHERE song_id = 91007;
 DELETE FROM Songs
 WHERE song_id = 91007;
 
--- ============================================================
 -- INTERMEDIATE STATEMENTS: 17-21
--- ============================================================
+
 -- 17. Show each recommendation with its song and workout information.
 -- The joins help us see who worked out, which phase they were in, and what song was suggested.
 SELECT r.recommendation_id,
