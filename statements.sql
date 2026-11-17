@@ -1,119 +1,228 @@
-SELECT u.username, w.session_id, w.start_time,
-       w.target_hr_min, w.target_hr_max
-FROM WorkoutSessions AS w
+-- CSE 111 - PulsePlay Checkpoint 2
+-- Roma's 16 assigned SQL statements: 6-10, 17-21, and 27-32.
+-- These statements use the 9-table PulsePlay-schema-corrected.sql design.
+--
+-- Schema changes to document in the final combined Checkpoint2-script.sql:
+-- The corrected schema replaces WorkoutSongs with PerformanceRatings,
+-- connects Recommendations to WorkoutPhases, and changes some column names
+-- and recommendation status values compared with our earlier Checkpoint 1 PDF.
+-- The team should confirm this is the final approved schema before submitting.
+--
+-- Run this file against a POPULATED Checkpoint2-dbase.sqlite3 file.
+-- The INSERT, UPDATE, and DELETE commands make changes to that database.
+
+-- Turn on foreign-key checking so relationships stay valid during changes.
+PRAGMA foreign_keys = ON;
+.headers on
+.mode column
+
+-- SIMPLE STATEMENTS: 6-10
+
+-- 6. Insert a new workout playlist for an existing user.
+-- This gives us another playlist that can hold workout songs.
+INSERT INTO Playlists (playlist_id, user_id, playlist_name)
+VALUES (91006, 1, 'PulsePlay Practice Mix')
+ON CONFLICT(playlist_id) DO NOTHING;
+-- 7. Insert a new sample song into our song catalog.
+-- Its tempo is 124 BPM, which could work for a steady workout.
+INSERT INTO Songs (song_id, title, artist, genre, tempo_bpm)
+VALUES (91007, 'Workout Test Track', 'PulsePlay Demo', 'Electronic', 124)
+ON CONFLICT(song_id) DO NOTHING;
+
+-- 8. Update the name of the practice playlist we just created.
+-- We only change the playlist with the matching ID.
+UPDATE Playlists
+SET playlist_name = 'PulsePlay Updated Practice Mix'
+WHERE playlist_id = 91006;
+
+-- 9. Update the sample song's tempo from 124 BPM to 132 BPM.
+-- This shows how we can correct a song's information later.
+UPDATE Songs
+SET tempo_bpm = 132
+WHERE song_id = 91007;
+
+-- 10. Delete the temporary test song after using it for practice.
+-- We leave all the real sample songs in the database unchanged.
+DELETE FROM Songs
+WHERE song_id = 91007;
+
+-- INTERMEDIATE STATEMENTS: 17-21
+
+-- 17. Show each recommendation with its song and workout information.
+-- The joins help us see who worked out, which phase they were in, and what song was suggested.
+SELECT r.recommendation_id,
+       u.username,
+       w.session_id,
+       wp.phase_name,
+       s.title AS song_title,
+       s.artist,
+       s.tempo_bpm,
+       r.status,
+       r.recommended_at
+FROM Recommendations AS r
+JOIN Songs AS s ON r.song_id = s.song_id
+JOIN WorkoutPhases AS wp ON r.phase_id = wp.phase_id
+JOIN WorkoutSessions AS w ON wp.session_id = w.session_id
+JOIN Users AS u ON w.user_id = u.user_id
+ORDER BY r.recommendation_id;
+
+-- 18. Show the performance scores users gave their workout sessions.
+-- We also include their comments to see how the workouts went.
+SELECT u.username,
+       w.session_id,
+       w.start_time,
+       pr.performance_score,
+       pr.comments
+FROM PerformanceRatings AS pr
+JOIN WorkoutSessions AS w ON pr.session_id = w.session_id
 JOIN Users AS u ON w.user_id = u.user_id
 ORDER BY u.username, w.start_time;
 
--- 8. Count how many playlists each user created. LEFT JOIN also keeps
---    users who have not made a playlist yet in the results.
-SELECT u.user_id, u.username,
-       COUNT(p.playlist_id) AS total_playlists
-FROM Users AS u
-LEFT JOIN Playlists AS p ON u.user_id = p.user_id
-GROUP BY u.user_id, u.username
-ORDER BY total_playlists DESC, u.username;
+-- 19. Count how many times each song has been recommended.
+-- We list the most recommended songs first and only show songs with at least one recommendation.
+SELECT s.song_id,
+       s.title,
+       s.artist,
+       COUNT(r.recommendation_id) AS recommendation_count
+FROM Songs AS s
+JOIN Recommendations AS r ON s.song_id = r.song_id
+GROUP BY s.song_id, s.title, s.artist
+HAVING COUNT(r.recommendation_id) > 0
+ORDER BY recommendation_count DESC, s.title
+LIMIT 10;
 
--- 9. Find workouts with an average heart rate above 110 BPM. We use
---    GROUP BY and HAVING because each workout has several readings.
+-- 20. Show workout sessions and the phases that belong to them.
+-- A LEFT JOIN keeps a session in the results even if it does not have any phases yet.
 SELECT w.session_id,
-       ROUND(AVG(hr.heart_rate_bpm), 1) AS average_heart_rate,
-       COUNT(hr.reading_id) AS total_readings
-FROM WorkoutSessions AS w
-JOIN WorkoutPhases AS wp ON w.session_id = wp.session_id
-JOIN HeartRateReadings AS hr ON wp.phase_id = hr.phase_id
-GROUP BY w.session_id
-HAVING AVG(hr.heart_rate_bpm) > 110
-ORDER BY average_heart_rate DESC;
-
--- 10. Show workout ratings and comments when they exist. LEFT JOIN
---     makes sure unrated workouts still appear in the results.
-SELECT w.session_id, u.username,
-       pr.performance_score, pr.comments
+       u.username,
+       w.start_time AS workout_start,
+       wp.phase_id,
+       wp.phase_name,
+       wp.start_time AS phase_start,
+       wp.end_time AS phase_end
 FROM WorkoutSessions AS w
 JOIN Users AS u ON w.user_id = u.user_id
-LEFT JOIN PerformanceRatings AS pr ON w.session_id = pr.session_id
-ORDER BY w.session_id;
+LEFT JOIN WorkoutPhases AS wp ON w.session_id = wp.session_id
+ORDER BY w.session_id, wp.start_time;
 
--- 11. Find songs that are faster than the overall average song tempo.
---     The smaller query first calculates the average for comparison.
-SELECT song_id, title, artist, tempo_bpm
-FROM Songs
-WHERE tempo_bpm > (
-    SELECT AVG(tempo_bpm)
-    FROM Songs
-)
-ORDER BY tempo_bpm DESC, title;
-
-
--- COMPLEX STATEMENTS (12-16) !!!
-
-
--- 12. Find users who have at least one playlist with a song at or above
---     150 BPM. EXISTS checks that a matching playlist song is present.
-SELECT u.user_id, u.username
+-- 21. Find users who have completed more workout sessions than the average user.
+-- The subquery finds the average session count, and HAVING compares each user against it.
+SELECT u.user_id,
+       u.username,
+       COUNT(w.session_id) AS total_sessions
 FROM Users AS u
-WHERE EXISTS (
-    SELECT 1
-    FROM Playlists AS p
-    JOIN PlaylistSongs AS ps ON p.playlist_id = ps.playlist_id
-    JOIN Songs AS s ON ps.song_id = s.song_id
-    WHERE p.user_id = u.user_id
-      AND s.tempo_bpm >= 150
+LEFT JOIN WorkoutSessions AS w ON u.user_id = w.user_id
+GROUP BY u.user_id, u.username
+HAVING COUNT(w.session_id) > (
+    SELECT AVG(session_count)
+    FROM (
+        SELECT COUNT(ws.session_id) AS session_count
+        FROM Users AS u2
+        LEFT JOIN WorkoutSessions AS ws ON u2.user_id = ws.user_id
+        GROUP BY u2.user_id
+    ) AS session_totals
 )
-ORDER BY u.username;
+ORDER BY total_sessions DESC, u.username;
 
--- 13. Find songs that have never been recommended to anyone. NOT EXISTS
---     checks that there is no recommendation connected to each song.
-SELECT s.song_id, s.title, s.artist
+
+-- COMPLEX STATEMENTS: 27-32
+
+
+-- 27. Combine songs saved in playlists with songs that have been recommended.
+-- UNION puts the two kinds of song information into one result without repeating the same source entry.
+SELECT s.song_id, s.title, s.artist, 'IN PLAYLIST' AS song_source
 FROM Songs AS s
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM Recommendations AS r
-    WHERE r.song_id = s.song_id
+WHERE EXISTS (
+    SELECT 1 FROM PlaylistSongs AS ps WHERE ps.song_id = s.song_id
 )
-ORDER BY s.title;
-
--- 14. Make one list of Pop and Electronic songs without duplicates.
---     UNION combines the results of the two separate searches.
-SELECT title, artist, genre
-FROM Songs
-WHERE genre = 'Pop'
 UNION
-SELECT title, artist, genre
-FROM Songs
-WHERE genre = 'Electronic'
-ORDER BY title;
-
--- 15. Find the most recent heart-rate reading for every workout. The
---     CTE and ROW_NUMBER pick one reading, and CASE checks whether its
---     value is below, inside, or above that workout's target range.
-WITH ranked_readings AS (
-    SELECT w.session_id, w.target_hr_min, w.target_hr_max,
-           hr.heart_rate_bpm, hr.recorded_at,
-           ROW_NUMBER() OVER (
-               PARTITION BY w.session_id
-               ORDER BY hr.recorded_at DESC, hr.reading_id DESC
-           ) AS reading_rank
-    FROM WorkoutSessions AS w
-    JOIN WorkoutPhases AS wp ON w.session_id = wp.session_id
-    JOIN HeartRateReadings AS hr ON wp.phase_id = hr.phase_id
+SELECT s.song_id, s.title, s.artist, 'RECOMMENDED' AS song_source
+FROM Songs AS s
+WHERE EXISTS (
+    SELECT 1 FROM Recommendations AS r WHERE r.song_id = s.song_id
 )
-SELECT session_id, heart_rate_bpm, target_hr_min, target_hr_max,
-       CASE
-           WHEN heart_rate_bpm < target_hr_min THEN 'BELOW TARGET'
-           WHEN heart_rate_bpm > target_hr_max THEN 'ABOVE TARGET'
-           ELSE 'IN TARGET'
-       END AS target_status
-FROM ranked_readings
-WHERE reading_rank = 1
-ORDER BY session_id;
+ORDER BY title, song_source;
 
--- 16. Find song IDs that are in at least one playlist but have never
---     been recommended. EXCEPT removes the recommended IDs from the
---     list of songs saved in playlists.
-SELECT song_id
-FROM PlaylistSongs
-EXCEPT
-SELECT song_id
-FROM Recommendations
-ORDER BY song_id;
+-- 28. Rank songs by how often they appear in the recommendation history.
+-- The CTE counts recommendations, and DENSE_RANK gives matching counts the same rank.
+WITH song_counts AS (
+    SELECT s.song_id,
+           s.title,
+           COUNT(r.recommendation_id) AS recommendation_count
+    FROM Songs AS s
+    LEFT JOIN Recommendations AS r ON s.song_id = r.song_id
+    GROUP BY s.song_id, s.title
+)
+SELECT song_id,
+       title,
+       recommendation_count,
+       DENSE_RANK() OVER (ORDER BY recommendation_count DESC) AS song_rank
+FROM song_counts
+ORDER BY song_rank, title
+LIMIT 15;
+
+-- 29. Create a view that summarizes recommendations for every song.
+-- It keeps totals for recommended, played, skipped, and rated songs so we can reuse them later.
+CREATE VIEW IF NOT EXISTS PulsePlayRecommendationSummary AS
+SELECT s.song_id,
+       s.title,
+       s.artist,
+       COUNT(r.recommendation_id) AS total_recommendations,
+       SUM(CASE WHEN r.status = 'PLAYED' THEN 1 ELSE 0 END) AS played_count,
+       SUM(CASE WHEN r.status = 'SKIPPED' THEN 1 ELSE 0 END) AS skipped_count,
+       SUM(CASE WHEN r.status = 'RATED' THEN 1 ELSE 0 END) AS rated_count,
+       ROUND(AVG(r.user_rating), 2) AS average_user_rating
+FROM Songs AS s
+LEFT JOIN Recommendations AS r ON s.song_id = r.song_id
+GROUP BY s.song_id, s.title, s.artist;
+
+-- 30. Read the recommendation summary view created in statement 29.
+-- We show the ten most recommended songs and their played, skipped, and rated totals.
+SELECT song_id,
+       title,
+       total_recommendations,
+       played_count,
+       skipped_count,
+       rated_count,
+       average_user_rating
+FROM PulsePlayRecommendationSummary
+WHERE total_recommendations > 0
+ORDER BY total_recommendations DESC, title
+LIMIT 10;
+
+-- 31. Create a trigger that updates a recommendation's status automatically.
+-- If a new pending recommendation is added to a workout phase that already ended, it is marked as skipped.
+CREATE TRIGGER IF NOT EXISTS PulsePlaySkipLateRecommendation
+AFTER INSERT ON Recommendations
+WHEN NEW.status = 'PENDING'
+     AND EXISTS (
+         SELECT 1
+         FROM WorkoutPhases AS wp
+         WHERE wp.phase_id = NEW.phase_id
+           AND wp.end_time IS NOT NULL
+     )
+BEGIN
+    UPDATE Recommendations
+    SET status = 'SKIPPED'
+    WHERE recommendation_id = NEW.recommendation_id;
+END;
+
+-- 32. Classify each heart-rate reading based on that workout's target range.
+-- CASE labels each reading as below target, in target, or above target.
+SELECT hr.reading_id,
+       u.username,
+       wp.phase_name,
+       hr.heart_rate_bpm,
+       w.target_hr_min,
+       w.target_hr_max,
+       CASE
+           WHEN hr.heart_rate_bpm < w.target_hr_min THEN 'BELOW TARGET'
+           WHEN hr.heart_rate_bpm > w.target_hr_max THEN 'ABOVE TARGET'
+           ELSE 'IN TARGET'
+       END AS heart_rate_category
+FROM HeartRateReadings AS hr
+JOIN WorkoutPhases AS wp ON hr.phase_id = wp.phase_id
+JOIN WorkoutSessions AS w ON wp.session_id = w.session_id
+JOIN Users AS u ON w.user_id = u.user_id
+ORDER BY hr.reading_id
+LIMIT 30;
